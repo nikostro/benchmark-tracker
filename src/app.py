@@ -1,50 +1,95 @@
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-epoch_url = "https://epoch.ai/data/llm_benchmark_accuracies.csv"
+from config import BENCHMARK_RESULTS_URL
 
-df = pd.read_csv(epoch_url)
+# Set page config
+st.set_page_config(
+    page_title="AI Model Benchmark Comparison", page_icon="📊", layout="wide"
+)
 
-gpqa_label = "GPQA (Diamond Set)"
-gpqa_df = df[df["Benchmark"] == gpqa_label]
+# Add title
+st.title("AI Model Benchmark Comparison")
 
-# Group by model name
-grouped_df = (
-    df.groupby("Name")
-    .agg(
-        {
-            "Release date": "max",
-            "Training compute (FLOP)": "mean",
-            "Accuracy": "mean",
-        }
+
+# Read the CSV file
+@st.cache_data
+def load_data():
+    df = pd.read_csv(BENCHMARK_RESULTS_URL)
+    # Remove the 'source' column for plotting
+    plot_df = df.drop("source", axis=1)
+    return df, plot_df
+
+
+df, plot_df = load_data()
+
+
+# Function to clean percentage values
+def clean_percentage(value):
+    if pd.isna(value) or value == "-":
+        return None
+    return float(value.strip("%"))
+
+
+# Process each row
+for idx, row in plot_df.iterrows():
+    test_name = row["name"]
+
+    # Create data for plotting
+    model_names = plot_df.columns[2:]  # Skip the test name and type columns
+    values = [clean_percentage(row[col]) for col in model_names]
+
+    # Filter out None values
+    valid_data = [
+        (name, val) for name, val in zip(model_names, values) if val is not None
+    ]
+    if not valid_data:
+        continue
+
+    model_names, values = zip(*valid_data)
+
+    # Create bar chart
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=model_names,
+                y=values,
+                text=[f"{v:.1f}%" for v in values],
+                textposition="auto",
+            )
+        ]
     )
-    .reset_index()
-)
 
-# Convert release date to datetime
-grouped_df["Release date"] = pd.to_datetime(grouped_df["Release date"])
+    # Update layout
+    fig.update_layout(
+        title=f"{test_name} Benchmark Results",
+        xaxis_title="Models",
+        yaxis_title="Score (%)",
+        height=500,
+        yaxis_range=[0, 100],
+        xaxis_tickangle=-45,
+        showlegend=False,
+        margin=dict(t=50, b=100),  # Adjust margins to prevent label cutoff
+    )
 
-# Create plot with plotly express (works great with Streamlit)
-fig = px.scatter(
-    grouped_df,
-    x="Release date",
-    y="Accuracy",
-    text="Name",
-    title=f"Model Performance Over Time for {gpqa_label}",
-)
+    # Display the plot
+    st.plotly_chart(fig, use_container_width=True)
 
-# Customize layout
-fig.update_traces(textposition="top center")
-fig.update_layout(xaxis_title="Release Date", yaxis_title="Accuracy")
+    # Display source if available
+    source = df.loc[idx, "source"]
+    if pd.notna(source):
+        st.markdown(f"Source: [{source}]({source})")
 
-# Display in Streamlit
-st.plotly_chart(fig, use_container_width=True)
+    # Add a divider between charts
+    st.divider()
 
-# Optionally show the data table below
-st.dataframe(grouped_df)
-
-st.write(gpqa_df)
+# Add footer with information
+st.markdown("""
+---
+This app visualizes performance comparisons across different AI models on various benchmarks.
+Each bar represents a model's score on the given benchmark test.
+""")
 
 if __name__ == "__main__":
     from streamlit.runtime.scriptrunner import get_script_run_ctx
