@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from config import BENCHMARK_RESULTS_URL
+from config import BENCHMARK_RESULTS_URL, CLAUDE_MODEL_CARD_URL
 
 # Set page config
 st.set_page_config(
@@ -40,14 +40,16 @@ for idx, row in plot_df.iterrows():
     model_names = plot_df.columns[2:]  # Skip the test name and type columns
     values = [clean_percentage(row[col]) for col in model_names]
 
-    # Filter out None values
+    # Filter out None values and create list of tuples for sorting
     valid_data = [
         (name, val) for name, val in zip(model_names, values) if val is not None
     ]
     if not valid_data:
         continue
 
-    model_names, values = zip(*valid_data)
+    # Sort the data by values in descending order
+    sorted_data = sorted(valid_data, key=lambda x: x[1], reverse=True)
+    model_names, values = zip(*sorted_data)
 
     # Create bar chart
     fig = go.Figure(
@@ -76,10 +78,10 @@ for idx, row in plot_df.iterrows():
     # Display the plot
     st.plotly_chart(fig, use_container_width=True)
 
-    # Display source if available
-    source = df.loc[idx, "source"]
-    if pd.notna(source):
-        st.markdown(f"Source: [{source}]({source})")
+    benchmark_ref = df.loc[idx, "source"]
+    source = CLAUDE_MODEL_CARD_URL
+    st.markdown(f"[Benchmark]({benchmark_ref})")
+    st.markdown(f"[Source]({source})")
 
     # Add a divider between charts
     st.divider()
